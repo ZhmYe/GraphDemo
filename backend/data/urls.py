@@ -25,5 +25,6 @@ urlpatterns = [
     path('upload/', views.upload_view),
     path('info/', views.info_view),
     path('timeline/', views.timeline_view),
-    path('aberration/', views.aberration_view)
+    path('aberration/', views.aberration_view),
+    path('overview/', views.overview_view)
 ]

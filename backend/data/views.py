@@ -1,5 +1,5 @@
 from django.http.response import JsonResponse
-from pydantic import Json
+# from pydantic import Json
 from backend import error
 from backend.function import check_login, check_method, generate_token, \
     get_username_by_token, get_post_json
@@ -36,7 +36,7 @@ def get_info():
     label_list = []
     blocknumber = {}
     for edge in edges:
-        if edge["label"] not in label_list:
+        if edge["label"] not in label_list and edge["label"] != "null":
             label_list.append(edge["label"])
         if "max" not in blocknumber:
             blocknumber["max"] = edge["blocknumber"]
@@ -48,7 +48,7 @@ def get_info():
         else:
             if blocknumber["min"] > edge["blocknumber"]:
                 blocknumber["min"] = edge["blocknumber"]
-    return len(nodes), len(edges), len(label_list), label_list, blocknumber
+    return len(nodes), len(edges), len(label_list) + 1, label_list, blocknumber
 def get_all_data(label, bmin, bmax):
     # with open("./media/upload_json/vertex.json", "r", encoding="utf-8") as f:
     #     total_nodes = json.load(f)
@@ -299,7 +299,8 @@ class Node:
         if jump not in self.jump:
             self.jump.append(jump)
 def get_timeline_data(type_name):
-    with open("./data/new.txt", encoding="utf-8") as f:
+    file_name = "./data/new.txt"
+    with open(file_name, encoding="utf-8") as f:
         data = f.read().split("\n")[:-1]
         # print(len(data))
         f.close()
@@ -311,6 +312,8 @@ def get_timeline_data(type_name):
             "x": float(info[0]),
             "y": float(info[1])
         }
+    position_dic = {}
+    position_index = 0
     with open("./data/edge.json", "r", encoding="utf-8") as f:
         total_edges = json.load(f)
         f.close()
@@ -318,34 +321,43 @@ def get_timeline_data(type_name):
     for edge in total_edges:
         if edge["label"] == type_name:
             edges.append(edge)
+        if edge["from_account"] not in position_dic:
+            info = data[position_index].split(":")[1].split(",")
+            position_dic[edge["from_account"]] = { "x": float(info[0]), "y": float(info[1])}
+            position_index += 1
+        if edge["to_account"] not in position_dic:
+            info = data[position_index].split(":")[1].split(",")
+            position_dic[edge["to_account"]] = { "x": float(info[0]), "y": float(info[1])}
+            position_index += 1
     Node_list = []
     dic4NodeList = {}
     max_jump = 0
     min_jump = 100
-    for edge in edges:
-        source = edge["from_account"]
-        target = edge["to_account"]
-        if source not in dic4NodeList:
-            dic4NodeList[source] = len(Node_list)
-            if target not in dic4NodeList:
-                Node_list.append(Node(source, 1))
-            else:
-                jump = Node_list[dic4NodeList[target]].jump[-1] - 1
-                Node_list.append(Node(source, jump))
-                if jump < min_jump:
-                    min_jump = jump
-        node = Node_list[dic4NodeList[source]]
-        edge["phase"] = node.jump[-1]
-        if target not in dic4NodeList:
-            dic4NodeList[target] = len(Node_list)
-            Node_list.append(Node(target, edge["phase"] + 1))
-            if edge["phase"] + 1 > max_jump:
-                max_jump = edge["phase"] + 1
-    # print(min_jump)
-    if min_jump < 1:
+    if type_name != "Volcano-Model":
         for edge in edges:
-            edge["phase"] += (1 - min_jump)
-        max_jump += (1 - min_jump)
+            source = edge["from_account"]
+            target = edge["to_account"]
+            if source not in dic4NodeList:
+                dic4NodeList[source] = len(Node_list)
+                if target not in dic4NodeList:
+                    Node_list.append(Node(source, 1))
+                else:
+                    jump = Node_list[dic4NodeList[target]].jump[-1] - 1
+                    Node_list.append(Node(source, jump))
+                    if jump < min_jump:
+                        min_jump = jump
+            node = Node_list[dic4NodeList[source]]
+            edge["phase"] = node.jump[-1]
+            if target not in dic4NodeList:
+                dic4NodeList[target] = len(Node_list)
+                Node_list.append(Node(target, edge["phase"] + 1))
+                if edge["phase"] + 1 > max_jump:
+                    max_jump = edge["phase"] + 1
+        # print(min_jump)
+        if min_jump < 1:
+            for edge in edges:
+                edge["phase"] += (1 - min_jump)
+            max_jump += (1 - min_jump)
     # print(max_jump)
     # print([edge["phase"] for edge in edges])
     nodes = []
@@ -391,8 +403,8 @@ def get_timeline_data(type_name):
 
     nodes = [
         {
-            "x": position[dic4nodes[node["id"]]]["x"],
-            "y": position[dic4nodes[node["id"]]]["y"],
+            "x": position_dic[node["id"]]["x"],
+            "y": position_dic[node["id"]]["y"],
             "id": dic4nodes[node["id"]],
             "name": get_short_name(node["id"]),
             "total_name": node["id"],
@@ -401,7 +413,7 @@ def get_timeline_data(type_name):
             # "opacity": 0.2,
             # "symbol": "image://./1.png",
             # "symbolSize": min(int(node["degree"]) * 10 + 10, 30),
-            "symbolSize": (20 + int(node["degree"] / 6)),
+            "symbolSize": (45 + int(node["degree"] / 6)) if (type_name == "laundering" or type_name == "type1") else (20 + int(node["degree"] / 6)),
             # "itemStyle": {"normal": {"color": color[random.randrange(0, len(color))]}},
             # "itemStyle": {"normal": {"color": "skyblue"}},
             "itemStyle": {'normal': {'color': get_color(int(node["degree"])), "opacity": 0.2}},
@@ -411,7 +423,7 @@ def get_timeline_data(type_name):
                     "show": True if int(node["degree"]) != 0 else False,
                     "position": 'inside',
                     "color": "black",
-                    "fontSize": int(5 * (20 + int(node["degree"] / 6)) / 50) 
+                    "fontSize": int(15 * (20 + int(node["degree"] / 6)) / 50) if (type_name == "laundering" or type_name == "type1") else int(5 * (20 + int(node["degree"] / 6)) / 50)
                 }
                 }   
         }
@@ -435,11 +447,14 @@ def get_opacity(phase, edgePhase):
         return "0", False
 def get_timeline_json(type_name):
     max_jump = {
-        "type1": 2,
-        "type2": 1,
-        "type3": 2,
-        "type4": 2,
-        "null": 4,
+        # "type1": 2,
+        # "type2": 1,
+        # "type3": 2,
+        # "type4": 2,
+        # "null": 4,
+        "Peel-Chain": 6,
+        "Coin-Shuffle": 2,
+        "Volcano-Model": 4
     }
     nodes, edges = get_timeline_data(type_name=type_name)
     # print(nodes)
@@ -497,8 +512,10 @@ def timeline_view(request):
     # try:
         type_name = request.GET.get("type")
         if type_name == '':
-            type_name = "null"
+            type_name = "Peel-Chain"
         timeline_json = get_timeline_json(type_name=type_name)
+        # total_nodes, total_edges = get_all_data('V', 0, -1)
+        # timeline_json = get_graph_json(total_nodes, total_edges)
         return JsonResponse({
             "message": 'ok',
             "json": timeline_json
@@ -509,9 +526,109 @@ def timeline_view(request):
     #         "message": message
     #     }, status=code)
 @check_method('GET')
+def overview_view(request):
+    type_name = request.GET.get("type")
+    filename = './data/' + type_name + '-overview.json'
+    with open(filename, "r", encoding="utf-8") as f:
+        edges = json.load(f)
+        f.close()
+    nodes = []
+    dic4nodes = {}
+    for edge in edges:
+        if edge["from_account"] not in dic4nodes:
+            nodes.append({"id": edge["from_account"], "degree": 1})
+            dic4nodes[edge["from_account"]] = len(dic4nodes)
+        else:
+            nodes[dic4nodes[edge["from_account"]]]["degree"] += 1
+        nodes[dic4nodes[edge["from_account"]]]["label"] = edge["from_account_type"]
+        if edge["to_account"] not in dic4nodes:
+            nodes.append({"id": edge["to_account"], "degree": 1})
+            dic4nodes[edge["to_account"]] = len(dic4nodes)
+        else:
+            nodes[dic4nodes[edge["to_account"]]]["degree"] += 1
+        nodes[dic4nodes[edge["to_account"]]]["label"] = edge["to_account_type"]
+    dic4edges = {}
+    for edge in edges:
+        if edge["from_account"] not in dic4edges:
+            dic4edges[edge["from_account"]] = {}
+        if edge["to_account"] not in dic4edges[edge["from_account"]]:
+            dic4edges[edge["from_account"]][edge["to_account"]] = 1
+            edge["curve"] = 0.1
+        else:
+            dic4edges[edge["from_account"]][edge["to_account"]] += 1
+            edge["curve"] = 0.1 * dic4edges[edge["from_account"]][edge["to_account"]]
+    color = ["red", "orange", "yellow", "green", "blue", "purple", "pink", "brown"]
+    edges = [
+        {
+        "type":"edge", 
+        "source": dic4nodes[edge["from_account"]], 
+        "target": dic4nodes[edge["to_account"]],
+        "degrees": [nodes[dic4nodes[edge["from_account"]]]["degree"], nodes[dic4nodes[edge["to_account"]]]["degree"]],
+        "value": edge["value"],
+        "label": edge["label"],
+        "total_name":[edge["from_account"], edge["to_account"]],
+        "blocknumber": edge["blocknumber"],
+        "tx_hash": edge["tx_hash"],
+        "symbol": ["", "arrow"], 
+        "symbolSize": min(int(nodes[dic4nodes[edge["to_account"]]]["degree"]) + 6, 10), 
+        "lineStyle": {"curve": edge["curve"],"color": "#9FA1B8", "opacity": 0.3}} for edge in edges
+    ]
+
+    nodes = [
+        {
+            # "x": node["x"],
+            # "y": node["y"],
+            "id": dic4nodes[node["id"]],
+            "name": get_short_name(node["id"]),
+            "total_name": node["id"],
+            "type": "node",
+            "value": node["degree"],
+            # "symbol": "image://./1.png",
+            "symbolSize": min(int(node["degree"]) * 10 + 10, 50),
+            # "itemStyle": {"normal": {"color": color[random.randrange(0, len(color))]}},
+            # "itemStyle": {"normal": {"color": "skyblue"}},
+            "itemStyle": {'normal': {'color': "pink" if node["label"] != "normal" else "skyblue"}},
+            # "itemStyle": {"normal": {"color": "red", "border-color": "green"}},
+            "label": {
+                "normal": {
+                    "show": True if int(node["degree"]) != 0 else False,
+                    "position": 'inside',
+                    "color": "black",
+                    "fontSize": int(7 * min(int(node["degree"]) * 10 + 10, 50) / 50) 
+                }
+                }   
+        }
+        for node in nodes
+]
+    c = (
+        Graph()
+        .add(
+            "",
+            nodes,
+            edges,
+            repulsion=1000,
+            symbol="circle",
+            # text_opts=opts.TextStyleOpts(font_weight=700),
+            # edge_symbol=["", "arrow"]
+            label_opts=opts.LabelOpts(font_weight=700, color=""),
+            # tooltip_opts=opts.TooltipOpts(formatter=),
+        )
+    )
+    # print(c.dump_options())
+    # return c.dump_options()
+    json_content = json.loads(c.dump_options())
+    json_content["animation"] = False
+    json_content["series"][0]["force"]["layoutAnimation"] = False
+    return JsonResponse({
+        'message': 'ok',
+        'json': json_content
+    })
+
+
+@check_method('GET')
 def aberration_view(request):
     # type_name = request.GET.get("type")
-    with open('./media/upload_json/edge.json', encoding="utf-8") as f:
+    with open('./data/edge.json', encoding="utf-8") as f:
         transactions = json.load(f)
         f.close()
     # print(type_name)
